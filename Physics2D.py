@@ -1,5 +1,5 @@
 '''
-Created on Mar 11, 2019
+    Created on 3/11/19
 '''
 import pygame
 import math
@@ -47,6 +47,12 @@ class Line:
                 return (intersectX, intersectY)
         except:
             return (x1, y1)
+    
+    def getLength(self):
+        nx = abs(self.x2 - self.x1)
+        ny = abs(self.y2 - self.y1)
+        length = math.sqrt((nx*nx) + (ny*ny))
+        return length
     
     # Returns normalized vector
     def normalized(self):

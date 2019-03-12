@@ -1,5 +1,5 @@
 '''
-Created on Mar 11, 2019
+    Created on 3/11/19
 '''
 import Constants as CONST
 import pygame
@@ -8,6 +8,7 @@ import os
 import Physics2D
 from enum import Enum
 from pygame.locals import *
+from _hashlib import new
 
 class PlayerAnims(Enum):
     playerIdleR = 0
@@ -97,7 +98,78 @@ class Player:
             self.currentVelocity = (self.currentVelocity[0], self.currentVelocity[1] + CONST.Gravity)
             self.jumpTime += 1 / CONST.FPS
         
-    
+    def checkCollisions(self, potentialCollisions, *ignored):
+        collisions = []
+        
+        for block in potentialCollisions:
+            if self.myCollider.checkCollision(block.myCollider):
+                blockPos = block.getPixelPos()
+                distance = (self.pos[0] - blockPos[0], self.pos[1] - blockPos[1])
+                
+                adjustedPos = [self.pos[0], self.pos[1]]
+                
+                ray = Physics2D.Line((self.pos[0]+CONST.PlayerSizeX/2, self.pos[1]+CONST.PlayerSizeY/2), (blockPos[0]+CONST.BlockSize/2, blockPos[1]+CONST.BlockSize/2))
+                
+                length = ray.getLength()
+                norm = ray.normalized()    
+                collisions.append((block, ray, length, norm, distance))
+        
+        # Sort collisions by closest vertical collision so they are dealt with first
+        new = []
+        for i in range(len(collisions)):
+            if len(new) == 0:
+                new.append(collisions[i])
+                continue
+            else:
+                found = False
+                for j in range(len(new)):
+                    if abs(collisions[i][4][1]) < abs(new[j][4][1]):
+                        new.insert(j, collisions[i]) 
+                        found = True
+                        break
+                if not found:
+                    new.append(collisions[i])
+        collisions = new
+        
+        # Deal with first collision, then recall function and redo all calculations for nearby blocks.
+        if len(collisions) > 0:
+            block = collisions[0][0]
+            ray = collisions[0][1]
+            length = collisions[0][2]
+            norm = collisions[0][3]
+            distance = collisions[0][4]
+            
+            if length <= CONST.PlayerSizeY + 5:
+                if norm[0] >= norm[1]+0.25: #and self.currentVelocity[1] > -8:# + 0.25:
+                    self.currentVelocity = (self.currentVelocity[0]/2, self.currentVelocity[1])
+                    if distance[0] < 0:
+                        adjustedPos[0] += (-distance[0] - CONST.PlayerSizeX)# - CONST.BlockSize)
+                    else:
+                        adjustedPos[0] += (-distance[0] + CONST.PlayerSizeX)
+                elif norm[1] >= norm[0]:# + 0.25:
+                    if distance[1] <= CONST.PlayerSizeY/2 and self.currentVelocity[1] > 0:
+                        adjustedPos[1] += (-distance[1] - (CONST.BlockSize)+((CONST.BlockSize-CONST.PlayerSizeY)/2))
+                        self.currentVelocity = (self.currentVelocity[0], 0)
+                        block.interactBelow(self.cameraPos)
+                    elif distance[1] >= -CONST.PlayerSizeY/2:
+                        adjustedPos[1] += (-distance[1] + (CONST.BlockSize))
+                        self.grounded = True
+                        self.currentVelocity = (self.currentVelocity[0], 0)
+                
+                self.pos = (adjustedPos[0], adjustedPos[1])
+                self.myCollider.updatePos(self.pos, (self.pos[0] + CONST.PlayerSizeX, self.pos[1] + CONST.PlayerSizeY))
+                
+            ign = list(ignored)
+            if len(ign) == 0:
+                ign = [collisions[0][0]]
+            else:
+                ign.append(collisions[0][0])
+            potentialBlocks = []
+            for i in range(1, len(collisions)):
+                potentialBlocks.append(collisions[i][0])
+            
+            self.checkCollisions(potentialBlocks, *ign)
+                    
     # Should be called once a frame
     #
     # Results: Moves the player based on velocity,
@@ -113,38 +185,8 @@ class Player:
         self.pos = (self.pos[0] + self.currentVelocity[0], self.pos[1] + self.currentVelocity[1])
         self.myCollider.updatePos(self.pos, (self.pos[0] + CONST.PlayerSizeX, self.pos[1] + CONST.PlayerSizeY))
         
-        # TODO: Check x collision, move away, check y collision, set y velocity to 0 if collided vertically AFTER moving out of wall and move up
-        
         self.grounded = False
-        for block in potentialCollisions:
-            if self.myCollider.checkCollision(block.myCollider):
-                blockPos = block.getPixelPos()
-                distance = (self.pos[0] - blockPos[0], self.pos[1] - blockPos[1])
-                
-                adjustedPos = [self.pos[0], self.pos[1]]
-                
-                ray = Physics2D.Line((self.pos[0]+CONST.PlayerSizeX/2, self.pos[1]+CONST.PlayerSizeY/2), (blockPos[0]+CONST.BlockSize/2, blockPos[1]+CONST.BlockSize/2))
-                
-                norm = ray.normalized()
-                
-                if norm[0] > norm[1] + 0.25:
-                    self.currentVelocity = (0, self.currentVelocity[1])
-                    if distance[0] < 0:
-                        adjustedPos[0] += (-distance[0] - CONST.PlayerSizeX)# - CONST.BlockSize)
-                    else:
-                        adjustedPos[0] += (-distance[0] + CONST.PlayerSizeX)
-                elif norm[1] > norm[0] + 0.25:
-                    if distance[1] < 0:
-                        adjustedPos[1] += (-distance[1] - (CONST.BlockSize))
-                        self.currentVelocity = (self.currentVelocity[0], 0)
-                        block.interactBelow()
-                    else:
-                        adjustedPos[1] += (-distance[1] + (CONST.BlockSize))
-                        self.grounded = True
-                        self.currentVelocity = (self.currentVelocity[0], 0)
-                    
-                self.pos = (adjustedPos[0], adjustedPos[1])
-                self.myCollider.updatePos(self.pos, (self.pos[0] + CONST.PlayerSizeX, self.pos[1] + CONST.PlayerSizeY))
+        self.checkCollisions(potentialCollisions)
     
         if not self.grounded:
             self.currentVelocity = (self.currentVelocity[0], self.currentVelocity[1] - CONST.Gravity)#(self.currentVelocity[0] - friction, self.currentVelocity[1] - CONST.Gravity)

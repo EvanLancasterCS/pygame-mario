@@ -1,5 +1,5 @@
 '''
-    Created on 3/11/2019
+    Created on 3/11/19
 ''' 
 import pygame
 import sys
@@ -54,11 +54,8 @@ while True:
         game.myPlayer.inputDir = 0
     
     
-    game.myPlayer.tick(game.blockList)
-    game.myPlayer.draw(display)
-    for block in game.blockList:
-        if block.isOnScreen(game.myPlayer.cameraPos):
-            block.draw(display, game.myPlayer.cameraPos)
+    game.draw(display)
+    
     
     pygame.display.update()
     fpsClock.tick(CONST.FPS)
