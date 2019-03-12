@@ -5,6 +5,7 @@ import Constants as CONST
 import pygame
 import math
 import os
+import Physics2D
 from enum import Enum
 from pygame.locals import *
 
@@ -19,6 +20,7 @@ class PlayerAnims(Enum):
 
 class Player:
     pos = None
+    myCollider = None
     cameraPos = None
     currentSprite = None
     currentVelocity = None
@@ -44,6 +46,7 @@ class Player:
         self.currentAnimFrame = 0
         self.inputDir = 0
         self.jumpTime = 0
+        self.myCollider = Physics2D.BoxCollider(self.pos, (self.pos[0] + CONST.PlayerSizeX, self.pos[1] + CONST.PlayerSizeY), False)
         
     # Results: Loads all player animations into loadedAnims as (Enum PlayerAnims, array[pygameImg])
     def loadAnims(self):
@@ -75,7 +78,7 @@ class Player:
         accel = dir*CONST.PlayerAcceleration
         
         if self.currentVelocity[1] != 0: # If airborne, player should have less control
-            accel /= 10
+            accel /= CONST.PlayerAirStruggle
             
         cv = self.currentVelocity
         cv = (cv[0]+accel, cv[1])
@@ -88,10 +91,12 @@ class Player:
         # TODO: check if can jump
         if self.grounded:
             self.currentVelocity = (self.currentVelocity[0], self.currentVelocity[1] + CONST.PlayerJumpForce)
+            self.pos = (self.pos[0], self.pos[1]+1)
             self.jumpTime = 0
         elif self.currentVelocity[1] > 0 and self.jumpTime < CONST.PlayerMaxJumpTime:
             self.currentVelocity = (self.currentVelocity[0], self.currentVelocity[1] + CONST.Gravity)
             self.jumpTime += 1 / CONST.FPS
+        
     
     # Should be called once a frame
     #
@@ -100,22 +105,54 @@ class Player:
     #          Updates whether the player is grounded,
     #          Calls setAnim
     #          Updates camera position
-    def tick(self):
+    def tick(self, potentialCollisions):
         friction = ((self.currentVelocity[0])/CONST.PlayerFriction)
         if self.currentVelocity[1] != 0: # If airborne, player should not experience friction / slow down
             friction = 0
         
         self.pos = (self.pos[0] + self.currentVelocity[0], self.pos[1] + self.currentVelocity[1])
-        self.currentVelocity = (self.currentVelocity[0] - friction, self.currentVelocity[1] - CONST.Gravity)
+        self.myCollider.updatePos(self.pos, (self.pos[0] + CONST.PlayerSizeX, self.pos[1] + CONST.PlayerSizeY))
+        
         # TODO: Check x collision, move away, check y collision, set y velocity to 0 if collided vertically AFTER moving out of wall and move up
         
-        # TEMP "UNIVERSAL" COLLISION FOR TESTING
-        if self.pos[1] <= 0:
-            self.pos = (self.pos[0], 0)
-            self.currentVelocity = (self.currentVelocity[0], 0)
-            self.grounded = True
+        self.grounded = False
+        for block in potentialCollisions:
+            if self.myCollider.checkCollision(block.myCollider):
+                blockPos = block.getPixelPos()
+                distance = (self.pos[0] - blockPos[0], self.pos[1] - blockPos[1])
+                
+                adjustedPos = [self.pos[0], self.pos[1]]
+                
+                ray = Physics2D.Line((self.pos[0]+CONST.PlayerSizeX/2, self.pos[1]+CONST.PlayerSizeY/2), (blockPos[0]+CONST.BlockSize/2, blockPos[1]+CONST.BlockSize/2))
+                
+                norm = ray.normalized()
+                
+                if norm[0] > norm[1] + 0.25:
+                    self.currentVelocity = (0, self.currentVelocity[1])
+                    if distance[0] < 0:
+                        adjustedPos[0] += (-distance[0] - CONST.PlayerSizeX)# - CONST.BlockSize)
+                    else:
+                        adjustedPos[0] += (-distance[0] + CONST.PlayerSizeX)
+                elif norm[1] > norm[0] + 0.25:
+                    if distance[1] < 0:
+                        adjustedPos[1] += (-distance[1] - (CONST.BlockSize))
+                        self.currentVelocity = (self.currentVelocity[0], 0)
+                        block.interactBelow()
+                    else:
+                        adjustedPos[1] += (-distance[1] + (CONST.BlockSize))
+                        self.grounded = True
+                        self.currentVelocity = (self.currentVelocity[0], 0)
+                    
+                self.pos = (adjustedPos[0], adjustedPos[1])
+                self.myCollider.updatePos(self.pos, (self.pos[0] + CONST.PlayerSizeX, self.pos[1] + CONST.PlayerSizeY))
+    
+        if not self.grounded:
+            self.currentVelocity = (self.currentVelocity[0], self.currentVelocity[1] - CONST.Gravity)#(self.currentVelocity[0] - friction, self.currentVelocity[1] - CONST.Gravity)
         else:
-            self.grounded = False
+            self.currentVelocity = (self.currentVelocity[0] - friction, self.currentVelocity[1])
+            
+        if self.currentVelocity[1] > CONST.MaxFallSpeed:
+            self.currentVelocity = (self.currentVelocity[0], CONST.MaxFallSpeed)
         
         self.currentAnimTickrate += 1
         
@@ -164,7 +201,7 @@ class Player:
         
     # Results: Returns on-screen position of the player
     def getOnscreenPos(self):
-        return (self.pos[0]-self.cameraPos[0]+(CONST.ScreenSizeX/2), (-self.pos[1])+self.cameraPos[1]+(CONST.ScreenSizeY/2))
+        return (self.pos[0]-self.cameraPos[0]+(CONST.ScreenSizeX/2), (-self.pos[1])+self.cameraPos[1]+(CONST.ScreenSizeY/2) - (CONST.PlayerSizeY-CONST.BlockSize))
     
     # Results: Draws the player to screen with his current sprite
     def draw(self, display):

@@ -14,14 +14,15 @@ display = pygame.display.set_mode((CONST.ScreenSizeX, CONST.ScreenSizeY))
 
 game = GS.Game()
 for x in range(-15, 15):
-    for y in range(-15, 0):
+    for y in range(-1, 0):
         game.addBlock((x,y), GS.Blocks.groundRock)
         
 game.addBlock((4, 0), GS.Blocks.wallBrick)
 game.addBlock((4, 1), GS.Blocks.wallBrick)
-game.addBlock((4, 2), GS.Blocks.wallBrick)
 game.addBlock((4, 3), GS.Blocks.wallBrick)
-game.addBlock((1,0), GS.Blocks.wallBrick)
+for x in range(15):
+    game.addBlock((x, 4), GS.Blocks.wallBrick)
+game.addBlock((16, -4), GS.Blocks.groundRock)
 
 while True:
     display.fill((0,0,0))
@@ -53,7 +54,7 @@ while True:
         game.myPlayer.inputDir = 0
     
     
-    game.myPlayer.tick()
+    game.myPlayer.tick(game.blockList)
     game.myPlayer.draw(display)
     for block in game.blockList:
         if block.isOnScreen(game.myPlayer.cameraPos):

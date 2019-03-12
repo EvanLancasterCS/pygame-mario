@@ -5,6 +5,7 @@ import pygame
 import sys
 import Constants as CONST
 import Player
+import Physics2D
 from enum import Enum
 from pygame.locals import *
 
@@ -26,6 +27,7 @@ class Block:
     gridPos = None
     blockE = None
     myGame = None
+    myCollider = None # TODO - Only give specified blocks colliders for better performance
     
     # Inputs: tuple gridPos(x, y)
     #         Enum from Blocks
@@ -34,6 +36,8 @@ class Block:
         self.gridPos = gridPos
         self.blockE = blockE
         self.myGame = myGame
+        pPos = self.getPixelPos()
+        self.myCollider = Physics2D.BoxCollider(pPos, (pPos[0]+CONST.BlockSize, pPos[1]+CONST.BlockSize), True)
         
     # Results: Returns the position in real pixels of block
     def getPixelPos(self):
@@ -54,6 +58,10 @@ class Block:
         if pos[0] <= CONST.ScreenSizeX and pos[0]+CONST.BlockSize >= 0 and pos[1] <= CONST.ScreenSizeY and pos[1]+32 >= 0:
             return True
         return False
+    
+    def interactBelow(self):
+        if BlockInfo[self.blockE][1] == BlockTypes.breakable:
+            self.myGame.blockList.remove(self)
     
     # Inputs: display from pygame
     #         tuple cameraPos(x, y)
