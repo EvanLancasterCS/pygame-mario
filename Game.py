@@ -6,7 +6,7 @@ import sys
 import GameState as GS
 import Constants as CONST
 from pygame.locals import *
-
+from Player import CurrentPlayerState
 
 fpsClock = pygame.time.Clock()
 
@@ -25,7 +25,7 @@ for x in range(15):
 game.addBlock((16, -4), GS.Blocks.groundRock)
 
 while True:
-    display.fill((0,0,0))
+    display.fill((100, 120, 180))
     
     
     
@@ -33,6 +33,19 @@ while True:
         if event.type == QUIT:
             pygame.quit()
             sys.exit()
+        if event.type == MOUSEBUTTONDOWN:
+            mPos = pygame.mouse.get_pos()
+            mPos = (mPos[0]-CONST.ScreenSizeX/2, mPos[1]-CONST.ScreenSizeY/2)
+            mPos = (mPos[0]+game.myPlayer.cameraPos[0], -mPos[1]+game.myPlayer.cameraPos[1]+CONST.BlockSize)
+            gridPos = [int(mPos[0]/CONST.BlockSize), int(mPos[1]/CONST.BlockSize)]
+            if gridPos[0] < 0:
+                gridPos[0] -= 1
+            if gridPos[1] < 0:
+                gridPos[1] -= 1
+            game.addBlock(gridPos, GS.Blocks.wallBrick)
+        if event.type == KEYDOWN:
+            if event.key == pygame.K_r:
+                game.myPlayer.changeState(CurrentPlayerState.Large)
         #if event.type == KEYDOWN:
         #    if event.key == pygame.K_w:
         #        game.myPlayer.jump()

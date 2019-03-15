@@ -9,6 +9,8 @@ import Physics2D
 from enum import Enum
 from pygame.locals import *
 from _hashlib import new
+from cgitb import small
+from Constants import FPS
 
 class PlayerAnims(Enum):
     playerIdleR = 0
@@ -18,6 +20,10 @@ class PlayerAnims(Enum):
     playerFallR = 4
     playerFallL = 5
 
+class CurrentPlayerState(Enum):
+    Small = 0
+    Large = 1
+    
 
 class Player:
     pos = None
@@ -26,10 +32,12 @@ class Player:
     currentSprite = None
     currentVelocity = None
     currentDir = None
+    currentState = None
     loadedAnims = None
     currentAnim = None
     currentAnimFrame = None
     currentAnimTickrate = None
+    currentHeight = None
     inputDir = None
     grounded = False
     jumpTime = 0
@@ -37,34 +45,51 @@ class Player:
     def __init__(self):
         self.pos = (0, 100)
         self.cameraPos = self.pos
+        self.currentHeight = CONST.PlayerSizeY
         self.loadedAnims = {}
-        self.currentAnimTickrate = 0
         self.loadAnims()
-        self.currentSprite = self.loadedAnims[PlayerAnims.playerIdleR][0]
+        self.currentAnimTickrate = 0
+        self.currentState = CurrentPlayerState.Small
+        self.currentSprite = self.loadedAnims[PlayerAnims.playerIdleR, self.currentState][0]
         self.currentVelocity = (0, 0)
         self.currentDir = 1
         self.currentAnim = PlayerAnims.playerIdleR
         self.currentAnimFrame = 0
         self.inputDir = 0
         self.jumpTime = 0
-        self.myCollider = Physics2D.BoxCollider(self.pos, (self.pos[0] + CONST.PlayerSizeX, self.pos[1] + CONST.PlayerSizeY), False)
+        self.myCollider = Physics2D.BoxCollider(self.pos, (self.pos[0] + CONST.PlayerSizeX, self.pos[1] + self.currentHeight), False)
         
-    # Results: Loads all player animations into loadedAnims as (Enum PlayerAnims, array[pygameImg])
+    # Inputs: CurrentPlayerState state
+    #
+    # Results: Changes player size / state to new
+    def changeState(self, newState):
+        if newState == CurrentPlayerState.Small:
+            self.currentHeight = CONST.PlayerSizeY
+        else:
+            self.currentHeight = CONST.PlayerLargeSizeY
+        self.currentState = newState
+        
+    # Results: Loads all player animations into loadedAnims as (key(Enum PlayerAnims, Enum CurrentPlayerState), array[pygameImg])
     def loadAnims(self):
         for animState in PlayerAnims:
-            slug = animState.name[0:len(animState.name)-1]
-            exists = True
-            i = 0
-            currentAnim = []
-            while exists:
-                sprite = pygame.image.load('Sprites/Player/' + slug + str(i) + '.png')
-                sprite = pygame.transform.scale(sprite, (CONST.PlayerSizeX, CONST.PlayerSizeY))
-                if animState.name[len(animState.name)-1] == 'L':
-                    sprite = pygame.transform.flip(sprite, 1, 0)
-                currentAnim.append(sprite)
-                i += 1
-                exists = os.path.isfile('Sprites/Player/' + slug + str(i) + '.png')
-            self.loadedAnims[animState] = currentAnim
+            for playerState in CurrentPlayerState:
+                slug = animState.name[0:len(animState.name)-1] 
+                slug = slug[0:6] + playerState.name + slug[6:]
+                exists = True
+                i = 0
+                currentAnim = []
+                while exists:
+                    sprite = pygame.image.load('Sprites/Player/' + slug + str(i) + '.png')
+                    if playerState == CurrentPlayerState.Small:
+                        sprite = pygame.transform.scale(sprite, (CONST.PlayerSizeX, CONST.PlayerSizeY))
+                    else:
+                        sprite = pygame.transform.scale(sprite, (CONST.PlayerSizeX, CONST.PlayerLargeSizeY))
+                    if animState.name[len(animState.name)-1] == 'L':
+                        sprite = pygame.transform.flip(sprite, 1, 0)
+                    currentAnim.append(sprite)
+                    i += 1
+                    exists = os.path.isfile('Sprites/Player/' + slug + str(i) + '.png')
+                self.loadedAnims[animState, playerState] = currentAnim
             
         
     # Inputs: integer dir, -1 or 1
@@ -89,7 +114,6 @@ class Player:
     
     # Results: If can jump, adds jumpforce to curr y velocity
     def jump(self):
-        # TODO: check if can jump
         if self.grounded:
             self.currentVelocity = (self.currentVelocity[0], self.currentVelocity[1] + CONST.PlayerJumpForce)
             self.pos = (self.pos[0], self.pos[1]+1)
@@ -97,24 +121,30 @@ class Player:
         elif self.currentVelocity[1] > 0 and self.jumpTime < CONST.PlayerMaxJumpTime:
             self.currentVelocity = (self.currentVelocity[0], self.currentVelocity[1] + CONST.Gravity)
             self.jumpTime += 1 / CONST.FPS
-        
-    def checkCollisions(self, potentialCollisions, *ignored):
+    
+    # Inputs: array potentialCollisions
+    #         array *ignored, should generally only be recursively added.
+    #
+    # Results: Moves player based on collisions, dealing with closer first, and
+    #          recalculating collisions for recently collided blocks after each movement.
+    def checkCollisions(self, potentialCollisions):
         collisions = []
         
         for block in potentialCollisions:
             if self.myCollider.checkCollision(block.myCollider):
                 blockPos = block.getPixelPos()
-                distance = (self.pos[0] - blockPos[0], self.pos[1] - blockPos[1])
+                #distance = (self.pos[0]+CONST.PlayerSizeX/2 - blockPos[0], self.pos[1]+self.currentHeight/2 - blockPos[1])
+                
                 
                 adjustedPos = [self.pos[0], self.pos[1]]
                 
-                ray = Physics2D.Line((self.pos[0]+CONST.PlayerSizeX/2, self.pos[1]+CONST.PlayerSizeY/2), (blockPos[0]+CONST.BlockSize/2, blockPos[1]+CONST.BlockSize/2))
-                
+                ray = Physics2D.Line((self.pos[0]+CONST.PlayerSizeX/2, self.pos[1]+self.currentHeight/2), (blockPos[0]+CONST.BlockSize/2, blockPos[1]+CONST.BlockSize/2))
+                distance = (ray.x1 - ray.x2, ray.y1 - ray.y2)
                 length = ray.getLength()
                 norm = ray.normalized()    
                 collisions.append((block, ray, length, norm, distance))
         
-        # Sort collisions by closest vertical collision so they are dealt with first
+        # Sort collisions by closest
         new = []
         for i in range(len(collisions)):
             if len(new) == 0:
@@ -123,7 +153,7 @@ class Player:
             else:
                 found = False
                 for j in range(len(new)):
-                    if abs(collisions[i][4][1]) < abs(new[j][4][1]):
+                    if abs(collisions[i][2]) < abs(new[j][2]):
                         new.insert(j, collisions[i]) 
                         found = True
                         break
@@ -136,45 +166,64 @@ class Player:
             block = collisions[0][0]
             ray = collisions[0][1]
             length = collisions[0][2]
-            norm = collisions[0][3]
+            norm = (round(collisions[0][3][0],1), round(collisions[0][3][1],1))
             distance = collisions[0][4]
             
-            if length <= CONST.PlayerSizeY + 5:
-                if norm[0] >= norm[1]+0.25: #and self.currentVelocity[1] > -8:# + 0.25:
-                    self.currentVelocity = (self.currentVelocity[0]/2, self.currentVelocity[1])
-                    if distance[0] < 0:
-                        adjustedPos[0] += (-distance[0] - CONST.PlayerSizeX)# - CONST.BlockSize)
-                    else:
-                        adjustedPos[0] += (-distance[0] + CONST.PlayerSizeX)
-                elif norm[1] >= norm[0]:# + 0.25:
-                    if distance[1] <= CONST.PlayerSizeY/2 and self.currentVelocity[1] > 0:
-                        adjustedPos[1] += (-distance[1] - (CONST.BlockSize)+((CONST.BlockSize-CONST.PlayerSizeY)/2))
-                        self.currentVelocity = (self.currentVelocity[0], 0)
-                        block.interactBelow(self.cameraPos)
-                    elif distance[1] >= -CONST.PlayerSizeY/2:
-                        adjustedPos[1] += (-distance[1] + (CONST.BlockSize))
-                        self.grounded = True
-                        self.currentVelocity = (self.currentVelocity[0], 0)
+            # This is a really ugly block of code and I'm sorry if you're trying to decode it.
+            # It took me a while to all the edge cases I encountered x-x
+            
+            # First, it checks for if it's within the "circle of possibilities" for the player,
+            # which has a radius based on current height, width, and the constant block size.
+            
+            # The next part determines if it should be a horizontal or vertical collision;
+            # to do this it checks if the proportion of the line for horizontal / vertical is greater
+            # than the other proportion. There's also specific checks for edge cases where
+            # the player is moving towards a wall and they shouldn't be able to break a block
+            # that is over another block.
+            
+            # Within the horizontal / vertical collisions, it determines whether the player
+            # should be pushed towards the right or left, which is based on the
+            # horizontal / vertical distance from the given block.
+            
+            # After it finishes all of its stuff, it moves the player and calls this function
+            # again with a smaller array of potential blocks.
+            
+            requiredDist = math.sqrt((self.currentHeight / 2)**2 + (CONST.PlayerSizeX / 2)**2) + CONST.BlockSize
+            if length <= requiredDist:
+                if norm[0] > norm[1] or (norm[1] > norm[0] and distance[1] >= 0 and block.myGame.blockExistsAtPos((block.gridPos[0], block.gridPos[1]+2)) and self.currentState == CurrentPlayerState.Large): # Right / Left Collision
+                    if distance[0] < 0: # Right-side collision
+                        adjustedPos[0] += (-distance[0] - (CONST.BlockSize / 2) - (CONST.PlayerSizeX/2))
+                        self.currentVelocity = (self.currentVelocity[0]*0.9, self.currentVelocity[1])
+                    elif distance[0] > 0: # Left-side collision
+                        adjustedPos[0] += (-distance[0] + (CONST.PlayerSizeX/2) + (CONST.PlayerSizeX/2)) 
+                        self.currentVelocity = (self.currentVelocity[0]*0.9, self.currentVelocity[1])
+                elif norm[1] > norm[0] and abs(distance[0]) < CONST.PlayerSizeX: # Up / Down Collision
+                    if distance[1] <= 0 and self.currentVelocity[1] > 0: # Up Collision
+                        if self.currentState == CurrentPlayerState.Small or not block.myGame.blockExistsAtPos((block.gridPos[0], block.gridPos[1]-2)):
+                            adjustedPos[1] += (-distance[1] - (CONST.BlockSize/2) - (self.currentHeight/2))
+                            self.currentVelocity = (self.currentVelocity[0], 0)
+                            block.interactBelow(self.currentState.value)
+                    elif distance[1] >= 0 and self.currentVelocity[1] <= 0 and not block.myGame.blockExistsAtPos((block.gridPos[0], block.gridPos[1]+1)): # Down Collision
+                        if self.currentState == CurrentPlayerState.Small or not block.myGame.blockExistsAtPos((block.gridPos[0], block.gridPos[1]+2)):
+                            adjustedPos[1] += (-distance[1] + (CONST.BlockSize/2) + (self.currentHeight/2))
+                            self.grounded = True
+                            self.currentVelocity = (self.currentVelocity[0], 0)
                 
                 self.pos = (adjustedPos[0], adjustedPos[1])
-                self.myCollider.updatePos(self.pos, (self.pos[0] + CONST.PlayerSizeX, self.pos[1] + CONST.PlayerSizeY))
+                self.myCollider.updatePos(self.pos, (self.pos[0] + CONST.PlayerSizeX, self.pos[1] + self.currentHeight))
                 
-            ign = list(ignored)
-            if len(ign) == 0:
-                ign = [collisions[0][0]]
-            else:
-                ign.append(collisions[0][0])
             potentialBlocks = []
             for i in range(1, len(collisions)):
                 potentialBlocks.append(collisions[i][0])
             
-            self.checkCollisions(potentialBlocks, *ign)
+            self.checkCollisions(potentialBlocks)
                     
     # Should be called once a frame
+    # Inputs: array potentialCollision of blocks to check for collisions with
     #
     # Results: Moves the player based on velocity,
     #          Reduces velocity based on friction,
-    #          Updates whether the player is grounded,
+    #          Calls checkCollisions with input potentialCollisions
     #          Calls setAnim
     #          Updates camera position
     def tick(self, potentialCollisions):
@@ -183,7 +232,7 @@ class Player:
             friction = 0
         
         self.pos = (self.pos[0] + self.currentVelocity[0], self.pos[1] + self.currentVelocity[1])
-        self.myCollider.updatePos(self.pos, (self.pos[0] + CONST.PlayerSizeX, self.pos[1] + CONST.PlayerSizeY))
+        self.myCollider.updatePos(self.pos, (self.pos[0] + CONST.PlayerSizeX, self.pos[1] + self.currentHeight))
         
         self.grounded = False
         self.checkCollisions(potentialCollisions)
@@ -192,14 +241,17 @@ class Player:
             self.currentVelocity = (self.currentVelocity[0], self.currentVelocity[1] - CONST.Gravity)#(self.currentVelocity[0] - friction, self.currentVelocity[1] - CONST.Gravity)
         else:
             self.currentVelocity = (self.currentVelocity[0] - friction, self.currentVelocity[1])
-            
-        if self.currentVelocity[1] > CONST.MaxFallSpeed:
-            self.currentVelocity = (self.currentVelocity[0], CONST.MaxFallSpeed)
         
-        self.currentAnimTickrate += 1
+        if self.currentVelocity[1] < -CONST.MaxFallSpeed:
+            self.currentVelocity = (self.currentVelocity[0], -CONST.MaxFallSpeed)
         
+        #if abs(self.currentVelocity[0]) <= 0.001:
+        #    self.currentVelocity = (0, self.currentVelocity[1])
+        
+        self.currentAnimTickrate += 1 / CONST.FPS
+
         if abs(self.currentVelocity[0]) > (CONST.MaxPlayerSpeed / 2) + 0.1:
-            self.currentAnimTickrate += 1
+            self.currentAnimTickrate += 1 / CONST.FPS
         if self.currentAnimTickrate >= CONST.AnimTickrate:
             self.setAnim()
             self.currentAnimTickrate = 0
@@ -219,7 +271,7 @@ class Player:
                     animState = state
                     break
             self.currentAnim = animState
-            animSheet = self.loadedAnims[self.currentAnim]
+            animSheet = self.loadedAnims[self.currentAnim, self.currentState]
             self.currentAnimFrame = 0
         else:
             if self.inputDir == 0:
@@ -235,7 +287,7 @@ class Player:
             self.currentAnim = animState
             
             self.currentAnimFrame += 1
-            animSheet = self.loadedAnims[self.currentAnim]
+            animSheet = self.loadedAnims[self.currentAnim, self.currentState]
             self.currentAnimFrame %= len(animSheet)
         
         
@@ -243,7 +295,7 @@ class Player:
         
     # Results: Returns on-screen position of the player
     def getOnscreenPos(self):
-        return (self.pos[0]-self.cameraPos[0]+(CONST.ScreenSizeX/2), (-self.pos[1])+self.cameraPos[1]+(CONST.ScreenSizeY/2) - (CONST.PlayerSizeY-CONST.BlockSize))
+        return (self.pos[0]-self.cameraPos[0]+(CONST.ScreenSizeX/2), (-self.pos[1])+self.cameraPos[1]+(CONST.ScreenSizeY/2) - (self.currentHeight-CONST.BlockSize))
     
     # Results: Draws the player to screen with his current sprite
     def draw(self, display):

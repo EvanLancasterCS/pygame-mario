@@ -65,8 +65,8 @@ class Block:
     
     # Results: Based on block type;
     #          Breakable: Removes self from list and creates chunk particles
-    def interactBelow(self, cameraPos):
-        if BlockInfo[self.blockE][1] == BlockTypes.breakable:
+    def interactBelow(self, currentState):
+        if BlockInfo[self.blockE][1] == BlockTypes.breakable and currentState != 0: # Only pops if state isn't small
             rects = Graphics.splitImage(self.myGame.loadedImgs[self.blockE])
             for r in rects:
                 pPos = self.getPixelPos()
@@ -114,7 +114,16 @@ class Game:
             particle[3] = (particle[3][0] - particle[3][0]/16, particle[3][1] - (CONST.Gravity/2)) # Y Velocity - Gravity, X Velocity - Air friction
             particle[2] = (particle[2][0] + particle[3][0], particle[2][1] + particle[3][1])
             display.blit(particle[0], Graphics.getOnScreenPos(particle[2], cameraPos), particle[1])
-        
+    
+    # Inputs: tuple pos(x, y)
+    #
+    # Results: Returns True / False based on if there is a block at given gridpos
+    def blockExistsAtPos(self, pos):
+        for block in self.blockList:
+            if block.gridPos[0] == pos[0] and block.gridPos[1] == pos[1]:
+                return True
+        return False
+    
     # Inputs: Enum from Blocks
     #         tuple pos(x, y)
     #
