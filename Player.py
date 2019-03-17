@@ -8,9 +8,6 @@ import os
 import Physics2D
 from enum import Enum
 from pygame.locals import *
-from _hashlib import new
-from cgitb import small
-from Constants import FPS
 
 class PlayerAnims(Enum):
     playerIdleR = 0
@@ -19,10 +16,6 @@ class PlayerAnims(Enum):
     playerWalkL = 3
     playerFallR = 4
     playerFallL = 5
-
-class CurrentPlayerState(Enum):
-    Small = 0
-    Large = 1
     
 
 class Player:
@@ -49,7 +42,7 @@ class Player:
         self.loadedAnims = {}
         self.loadAnims()
         self.currentAnimTickrate = 0
-        self.currentState = CurrentPlayerState.Small
+        self.currentState = CONST.CurrentPlayerState.Small
         self.currentSprite = self.loadedAnims[PlayerAnims.playerIdleR, self.currentState][0]
         self.currentVelocity = (0, 0)
         self.currentDir = 1
@@ -63,7 +56,7 @@ class Player:
     #
     # Results: Changes player size / state to new
     def changeState(self, newState):
-        if newState == CurrentPlayerState.Small:
+        if newState == CONST.CurrentPlayerState.Small:
             self.currentHeight = CONST.PlayerSizeY
         else:
             self.currentHeight = CONST.PlayerLargeSizeY
@@ -72,7 +65,7 @@ class Player:
     # Results: Loads all player animations into loadedAnims as (key(Enum PlayerAnims, Enum CurrentPlayerState), array[pygameImg])
     def loadAnims(self):
         for animState in PlayerAnims:
-            for playerState in CurrentPlayerState:
+            for playerState in CONST.CurrentPlayerState:
                 slug = animState.name[0:len(animState.name)-1] 
                 slug = slug[0:6] + playerState.name + slug[6:]
                 exists = True
@@ -80,7 +73,7 @@ class Player:
                 currentAnim = []
                 while exists:
                     sprite = pygame.image.load('Sprites/Player/' + slug + str(i) + '.png')
-                    if playerState == CurrentPlayerState.Small:
+                    if playerState == CONST.CurrentPlayerState.Small:
                         sprite = pygame.transform.scale(sprite, (CONST.PlayerSizeX, CONST.PlayerSizeY))
                     else:
                         sprite = pygame.transform.scale(sprite, (CONST.PlayerSizeX, CONST.PlayerLargeSizeY))
@@ -130,11 +123,10 @@ class Player:
     def checkCollisions(self, potentialCollisions):
         collisions = []
         
+        # Adds blocks that are colliding to collisions array
         for block in potentialCollisions:
             if self.myCollider.checkCollision(block.myCollider):
                 blockPos = block.getPixelPos()
-                #distance = (self.pos[0]+CONST.PlayerSizeX/2 - blockPos[0], self.pos[1]+self.currentHeight/2 - blockPos[1])
-                
                 
                 adjustedPos = [self.pos[0], self.pos[1]]
                 
@@ -166,12 +158,27 @@ class Player:
             block = collisions[0][0]
             ray = collisions[0][1]
             length = collisions[0][2]
-            norm = (round(collisions[0][3][0],1), round(collisions[0][3][1],1))
+            norm = (round(collisions[0][3][0],2), round(collisions[0][3][1],2))
             distance = collisions[0][4]
             
-            # This is a really ugly block of code and I'm sorry if you're trying to decode it.
-            # It took me a while to all the edge cases I encountered x-x
+            requiredDist = math.sqrt((self.currentHeight / 2)**2 + (CONST.PlayerSizeX / 2)**2) + CONST.BlockSize
             
+            # If powerup, give to player and end current collision check
+            if CONST.BlockInfo[block.blockE][1] == CONST.BlockTypes.powerup and length < requiredDist:
+                self.changeState(CONST.BlockInfo[block.blockE][2])
+                block.interact(self.currentState)
+                
+            if CONST.BlockInfo[block.blockE][1] == CONST.BlockTypes.powerup:
+                potentialBlocks = []
+                for i in range(1, len(collisions)):
+                    potentialBlocks.append(collisions[i][0])
+            
+                self.checkCollisions(potentialBlocks)
+                return
+                
+            # This is a really ugly block of code and I'm sorry if you're trying to decode it.
+            # It took me a while to all the edge cases I encountered
+
             # First, it checks for if it's within the "circle of possibilities" for the player,
             # which has a radius based on current height, width, and the constant block size.
             
@@ -187,24 +194,23 @@ class Player:
             
             # After it finishes all of its stuff, it moves the player and calls this function
             # again with a smaller array of potential blocks.
-            
-            requiredDist = math.sqrt((self.currentHeight / 2)**2 + (CONST.PlayerSizeX / 2)**2) + CONST.BlockSize
+        
             if length <= requiredDist:
-                if norm[0] > norm[1] or (norm[1] > norm[0] and distance[1] >= 0 and block.myGame.blockExistsAtPos((block.gridPos[0], block.gridPos[1]+2)) and self.currentState == CurrentPlayerState.Large): # Right / Left Collision
+                if norm[0] > norm[1] or (norm[1] > norm[0] and distance[1] >= 0 and block.myGame.blockExistsAtPos((block.gridPos[0], block.gridPos[1]+2)) and self.currentState == CONST.CurrentPlayerState.Large): # Right / Left Collision
                     if distance[0] < 0: # Right-side collision
                         adjustedPos[0] += (-distance[0] - (CONST.BlockSize / 2) - (CONST.PlayerSizeX/2))
-                        self.currentVelocity = (self.currentVelocity[0]*0.9, self.currentVelocity[1])
+                        self.currentVelocity = (self.currentVelocity[0]*0.99, self.currentVelocity[1])
                     elif distance[0] > 0: # Left-side collision
                         adjustedPos[0] += (-distance[0] + (CONST.PlayerSizeX/2) + (CONST.PlayerSizeX/2)) 
-                        self.currentVelocity = (self.currentVelocity[0]*0.9, self.currentVelocity[1])
+                        self.currentVelocity = (self.currentVelocity[0]*0.99, self.currentVelocity[1])
                 elif norm[1] > norm[0] and abs(distance[0]) < CONST.PlayerSizeX: # Up / Down Collision
                     if distance[1] <= 0 and self.currentVelocity[1] > 0: # Up Collision
-                        if self.currentState == CurrentPlayerState.Small or not block.myGame.blockExistsAtPos((block.gridPos[0], block.gridPos[1]-2)):
+                        if self.currentState == CONST.CurrentPlayerState.Small or not block.myGame.blockExistsAtPos((block.gridPos[0], block.gridPos[1]-2)):
                             adjustedPos[1] += (-distance[1] - (CONST.BlockSize/2) - (self.currentHeight/2))
                             self.currentVelocity = (self.currentVelocity[0], 0)
-                            block.interactBelow(self.currentState.value)
+                            block.interactBelow(self.currentState)
                     elif distance[1] >= 0 and self.currentVelocity[1] <= 0 and not block.myGame.blockExistsAtPos((block.gridPos[0], block.gridPos[1]+1)): # Down Collision
-                        if self.currentState == CurrentPlayerState.Small or not block.myGame.blockExistsAtPos((block.gridPos[0], block.gridPos[1]+2)):
+                        if self.currentState == CONST.CurrentPlayerState.Small or not block.myGame.blockExistsAtPos((block.gridPos[0], block.gridPos[1]+2)):
                             adjustedPos[1] += (-distance[1] + (CONST.BlockSize/2) + (self.currentHeight/2))
                             self.grounded = True
                             self.currentVelocity = (self.currentVelocity[0], 0)

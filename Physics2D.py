@@ -7,6 +7,7 @@ import Constants as CONST
 
 # Inputs: num xMin1; num xMax1
 #         num xMin2; num xMax2
+#
 # Results: Return True / False based on if overlapping
 def isOverlapping1D(xMin1, xMax1, xMin2, xMax2):
     return xMax1 >= xMin2 and xMax2 >= xMin1
