@@ -39,9 +39,6 @@ while True:
                 game.myPlayer.changeState(CONST.CurrentPlayerState.Large)
             if event.key == pygame.K_t:
                 game.myPlayer.changeState(CONST.CurrentPlayerState.Small)
-            if event.key == pygame.K_e:
-                gridPos = Editor.mousePosToGrid(game.myPlayer.cameraPos)
-                game.addBlock(gridPos, CONST.Blocks.mushroom)
             if event.key == pygame.K_s:
                 game.myPlayer.crouch()
             if event.key == pygame.K_q:
@@ -70,7 +67,7 @@ while True:
     
     
     game.draw(display)
-    Editor.draw(display, game, [mouseDown, mouseUp], fpsClock)
+    #Editor.draw(display, game, [mouseDown, mouseUp], fpsClock)
     
     pygame.display.update()
     fpsClock.tick(CONST.FPS)

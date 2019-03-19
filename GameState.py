@@ -26,6 +26,7 @@ class Block:
     animProgress = None
     currentAnimAdd = None
     currentVelocity = None
+    reward = None
     
     # Inputs: tuple gridPos(x, y)
     #         Enum from Blocks
@@ -42,8 +43,10 @@ class Block:
         self.animProgress = 1
         self.currentAnimAdd = 0
         self.currentVelocity = (0,0)
-        if CONST.BlockInfo[self.blockE][1] == CONST.BlockTypes.powerup:
+        if CONST.BlockInfo[self.blockE][1] == CONST.BlockTypes.powerup and CONST.BlockInfo[self.blockE][3]:
             self.currentVelocity = (0.05, 0)
+        if CONST.BlockInfo[self.blockE][1] == CONST.BlockTypes.reward:
+            self.reward = CONST.Blocks.mushroom
     
     # Results: sets activeCollider to true or false based on if enclosed by 4 blocks
     def setColliderActivity(self):
@@ -128,6 +131,16 @@ class Block:
             chunkPos = self.myGame.blockToChunk(self.gridPos[0])
             self.myGame.chunks[chunkPos].remove(self)
             self.myGame.blockList.remove(self)
+        elif self.reward != None:
+            self.myGame.addBlock((self.gridPos[0], self.gridPos[1]+1), self.reward)
+            self.reward = None
+            slug = CONST.BlockInfo[self.blockE][0]
+            slug += "-empty"
+            for key in CONST.BlockInfo:
+                if CONST.BlockInfo[key][0] == slug:
+                    self.blockE = key
+                    break
+            
         
     # Results: Gets current anim progress position, adds time.deltatime to current anim time if in progress
     def getAnimPos(self):
@@ -248,6 +261,17 @@ class Game:
     
     # Inputs: tuple pos(x,y)
     #
+    # Results: Returns block at pos if there is one, None if there is not
+    def getBlock(self, pos):
+        chunkPos = self.blockToChunk(pos[0])
+        chunkBlocks = self.getChunkBlocks(chunkPos)
+        for block in chunkBlocks:
+            if block.gridPos[0] == pos[0] and block.gridPos[1] == pos[1]:
+                return block
+        return None
+    
+    # Inputs: tuple pos(x,y)
+    #
     # Results: Removes block from blockList and chunks if exists
     def removeBlock(self, pos):
         if self.blockExistsAtPos(pos):
@@ -300,7 +324,8 @@ class Game:
         self.myPlayer.tick(potentialCollisions)
         self.myPlayer.draw(display)
         
-        for block in drawArea:
+        for i in range(len(drawArea)):
+            block = drawArea[len(drawArea)-i-1]
             if block.isOnScreen(self.myPlayer.cameraPos):
                 block.draw(display, self.myPlayer.cameraPos)
                 

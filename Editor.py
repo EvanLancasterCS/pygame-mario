@@ -206,10 +206,15 @@ def draw(display, game, mouse1Info, fps):
         minY = min(y1, y2)
         maxY = max(y1, y2)
         
+        block = game.getBlock((minX, minY))
+
         if erasing:
             for x in range(minX, maxX):
                 for y in range(minY, maxY):
                     game.removeBlock((x, y))
+        elif block != None and minX == maxX-1 and minY == maxY-1 and block.blockE == CONST.Blocks.emptyQuestionBlock:
+            block.reward = cSelectedBlock
+            block.blockE = CONST.Blocks.questionBlock
         else:
             for x in range(minX, maxX):
                 for y in range(minY, maxY):
