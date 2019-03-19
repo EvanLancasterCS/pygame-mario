@@ -7,6 +7,7 @@ import GameState as GS
 import Constants as CONST
 import Graphics
 import math
+import Editor
 from pygame.locals import *
 
 fpsClock = pygame.time.Clock()
@@ -26,45 +27,38 @@ for x in range(15):
     game.addBlock((x, 4), CONST.Blocks.wallBrick)
 game.addBlock((16, -4), CONST.Blocks.groundRock)
 
-def mousePosToGrid():
-    mPos = pygame.mouse.get_pos()
-    mPos = (mPos[0]-CONST.ScreenSizeX/2, mPos[1]-CONST.ScreenSizeY/2)
-    mPos = (mPos[0]+game.myPlayer.cameraPos[0], -mPos[1]+game.myPlayer.cameraPos[1]+CONST.BlockSize)
-    gridPos = [mPos[0]/CONST.BlockSize, mPos[1]/CONST.BlockSize]
-    gridPos = (math.floor(gridPos[0]), math.floor(gridPos[1]))
-    return gridPos
-
 while True:
     display.fill((100, 120, 180))
-    
-    
-    
+    mouseDown = False
+    mouseUp = False
+    print(fpsClock)
     for event in pygame.event.get():
         if event.type == QUIT:
             pygame.quit()
             sys.exit()
-        if event.type == MOUSEBUTTONDOWN:
-            gridPos = mousePosToGrid()
-            game.addBlock(gridPos, CONST.Blocks.wallBrick)
+        if event.type == MOUSEBUTTONDOWN and event.button == 1:
+            mouseDown = True
+        if event.type == MOUSEBUTTONUP and event.button == 1:
+            mouseUp = True
         if event.type == KEYDOWN:
             if event.key == pygame.K_r:
                 game.myPlayer.changeState(CONST.CurrentPlayerState.Large)
             if event.key == pygame.K_t:
                 game.myPlayer.changeState(CONST.CurrentPlayerState.Small)
             if event.key == pygame.K_e:
-                gridPos = mousePosToGrid()
+                gridPos = Editor.mousePosToGrid(game.myPlayer.cameraPos)
                 game.addBlock(gridPos, CONST.Blocks.mushroom)
-        #if event.type == KEYDOWN:
-        #    if event.key == pygame.K_w:
-        #        game.myPlayer.jump()
-    gridPos = mousePosToGrid()
-    realPos = (gridPos[0] * CONST.BlockSize, gridPos[1] * CONST.BlockSize)
-    realPos = Graphics.getOnScreenPos(realPos, game.myPlayer.cameraPos)
-    pygame.draw.rect(display, (200, 50, 50), pygame.Rect(realPos[0], realPos[1], CONST.BlockSize, CONST.BlockSize), 1)
+            if event.key == pygame.K_s:
+                game.myPlayer.crouch()
+        if event.type == KEYUP:
+            if event.key == pygame.K_s:
+                game.myPlayer.uncrouch()
+
     
     keys = pygame.key.get_pressed()
     moving = False
     modifier = 1
+        
     if keys[pygame.K_LSHIFT]:
         modifier = CONST.PlayerSprintIncrease
     if keys[pygame.K_d]:
@@ -80,7 +74,7 @@ while True:
     
     
     game.draw(display)
-    
+    Editor.draw(display, game, [mouseDown, mouseUp])
     
     pygame.display.update()
     fpsClock.tick(CONST.FPS)

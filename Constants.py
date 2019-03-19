@@ -4,10 +4,13 @@
 from enum import Enum
 # Graphics Constants
 FPS = 60
-ScreenSizeX = 1001
+ScreenSizeX = 1000
 ScreenSizeY = 800
 BlockSize = 40
 AnimTickrate = 0.08
+
+# Editor Constants
+OptionsPageLength = 8
 
 # Physics Constants
 Gravity = 40 * (1 / FPS)

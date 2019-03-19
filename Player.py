@@ -6,6 +6,7 @@ import pygame
 import math
 import os
 import Physics2D
+import Graphics
 from enum import Enum
 from pygame.locals import *
 
@@ -16,6 +17,8 @@ class PlayerAnims(Enum):
     playerWalkL = 3
     playerFallR = 4
     playerFallL = 5
+    playerCrouchR = 6
+    playerCrouchL = 7
     
 
 class Player:
@@ -33,10 +36,12 @@ class Player:
     currentHeight = None
     inputDir = None
     grounded = False
+    crouching = False
     jumpTime = 0
     
     def __init__(self):
         self.pos = (0, 100)
+        self.crouching = False
         self.cameraPos = self.pos
         self.currentHeight = CONST.PlayerSizeY
         self.loadedAnims = {}
@@ -83,28 +88,42 @@ class Player:
                     i += 1
                     exists = os.path.isfile('Sprites/Player/' + slug + str(i) + '.png')
                 self.loadedAnims[animState, playerState] = currentAnim
-            
+        
+    # Results: Lowers hitbox if big mario and sets crouching to true
+    def crouch(self):
+        self.crouching = True
+        self.currentHeight = CONST.PlayerSizeY
+        
+        
+    # Results: Raises hitbox if big mario and changes anim state        
+    def uncrouch(self):
+        self.crouching = False
+        if not self.currentState == CONST.CurrentPlayerState.Small:
+            self.currentHeight = CONST.PlayerLargeSizeY
         
     # Inputs: integer dir, -1 or 1
     #
     # Results: Change of velocity 
     def move(self, dir):
-        if self.grounded:
-            self.inputDir = dir / abs(dir)
-            if dir != self.currentDir:#and dir != 0:
-                self.currentDir = dir / abs(dir)
-        
-        accel = dir*CONST.PlayerAcceleration
-        
-        if self.currentVelocity[1] != 0: # If airborne, player should have less control
-            accel /= CONST.PlayerAirStruggle
+        if not self.crouching or not self.grounded: # Allows for air movement but not grounded movement when crouching
+            if self.grounded:
+                self.inputDir = dir / abs(dir)
+                if dir != self.currentDir:#and dir != 0:
+                    self.currentDir = dir / abs(dir)
             
-        cv = self.currentVelocity
-        cv = (cv[0]+accel, cv[1])
-        if abs(cv[0]) > abs(CONST.MaxPlayerSpeed):
-            cv = (CONST.MaxPlayerSpeed * (dir/abs(dir)), cv[1])
-        self.currentVelocity = cv
-    
+            accel = dir*CONST.PlayerAcceleration
+            
+            if self.currentVelocity[1] != 0: # If airborne, player should have less control
+                accel /= CONST.PlayerAirStruggle
+                
+            cv = self.currentVelocity
+            cv = (cv[0]+accel, cv[1])
+            if abs(cv[0]) > abs(CONST.MaxPlayerSpeed):
+                cv = (CONST.MaxPlayerSpeed * (dir/abs(dir)), cv[1])
+            self.currentVelocity = cv
+        
+    # Inputs: None 
+    #
     # Results: If can jump, adds jumpforce to curr y velocity
     def jump(self):
         if self.grounded:
@@ -199,10 +218,10 @@ class Player:
                 if norm[0] > norm[1] or (norm[1] > norm[0] and distance[1] >= 0 and block.myGame.blockExistsAtPos((block.gridPos[0], block.gridPos[1]+2)) and self.currentState == CONST.CurrentPlayerState.Large): # Right / Left Collision
                     if distance[0] < 0: # Right-side collision
                         adjustedPos[0] += (-distance[0] - (CONST.BlockSize / 2) - (CONST.PlayerSizeX/2))
-                        self.currentVelocity = (self.currentVelocity[0]*0.99, self.currentVelocity[1])
+                        self.currentVelocity = (self.currentVelocity[0]*0.95, self.currentVelocity[1])
                     elif distance[0] > 0: # Left-side collision
                         adjustedPos[0] += (-distance[0] + (CONST.PlayerSizeX/2) + (CONST.PlayerSizeX/2)) 
-                        self.currentVelocity = (self.currentVelocity[0]*0.99, self.currentVelocity[1])
+                        self.currentVelocity = (self.currentVelocity[0]*0.95, self.currentVelocity[1])
                 elif norm[1] > norm[0] and abs(distance[0]) < CONST.PlayerSizeX: # Up / Down Collision
                     if distance[1] <= 0 and self.currentVelocity[1] > 0: # Up Collision
                         if self.currentState == CONST.CurrentPlayerState.Small or not block.myGame.blockExistsAtPos((block.gridPos[0], block.gridPos[1]-2)):
@@ -251,9 +270,6 @@ class Player:
         if self.currentVelocity[1] < -CONST.MaxFallSpeed:
             self.currentVelocity = (self.currentVelocity[0], -CONST.MaxFallSpeed)
         
-        #if abs(self.currentVelocity[0]) <= 0.001:
-        #    self.currentVelocity = (0, self.currentVelocity[1])
-        
         self.currentAnimTickrate += 1 / CONST.FPS
 
         if abs(self.currentVelocity[0]) > (CONST.MaxPlayerSpeed / 2) + 0.1:
@@ -271,9 +287,17 @@ class Player:
         animState = None
         animSheet = None
         
-        if not self.grounded:
+        if not self.grounded and not self.crouching:
             for state in PlayerAnims:
                 if state.name == "playerFall" + stringDir:
+                    animState = state
+                    break
+            self.currentAnim = animState
+            animSheet = self.loadedAnims[self.currentAnim, self.currentState]
+            self.currentAnimFrame = 0
+        elif self.crouching:
+            for state in PlayerAnims:
+                if state.name == "playerCrouch" + stringDir:
                     animState = state
                     break
             self.currentAnim = animState
@@ -301,8 +325,10 @@ class Player:
         
     # Results: Returns on-screen position of the player
     def getOnscreenPos(self):
-        return (self.pos[0]-self.cameraPos[0]+(CONST.ScreenSizeX/2), (-self.pos[1])+self.cameraPos[1]+(CONST.ScreenSizeY/2) - (self.currentHeight-CONST.BlockSize))
-    
+        if self.currentState == CONST.CurrentPlayerState.Small:
+            return Graphics.getOnScreenPos(self.pos, self.cameraPos)
+        return Graphics.getOnScreenPos((self.pos[0], self.pos[1]+(CONST.PlayerLargeSizeY - CONST.PlayerSizeY)), self.cameraPos)
+        
     # Results: Draws the player to screen with his current sprite
     def draw(self, display):
         display.blit(self.currentSprite, self.getOnscreenPos())

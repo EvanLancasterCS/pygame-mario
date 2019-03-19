@@ -11,11 +11,13 @@ import random
 import math
 from enum import Enum
 from pygame.locals import *
+from _operator import pos
 
 class Block:
     gridPos = None
     blockE = None
     myGame = None
+    activeCollider = None
     myCollider = None       # TODO - Only give specified blocks colliders for better performance
     currentParticles = None # Particles are an array of size 5 (img, rect, pos, velocity, lifetime)
     animProgress = None
@@ -29,6 +31,7 @@ class Block:
         self.gridPos = gridPos
         self.blockE = blockE
         self.myGame = myGame
+        self.activeCollider = True
         pPos = self.getPixelPos()
         self.myCollider = Physics2D.BoxCollider(pPos, (pPos[0]+CONST.BlockSize, pPos[1]+CONST.BlockSize), True)
         self.currentParticles = []
@@ -38,6 +41,16 @@ class Block:
         if CONST.BlockInfo[self.blockE][1] == CONST.BlockTypes.powerup:
             self.currentVelocity = (0.05, 0)
     
+    # Results: sets activeCollider to true or false based on if enclosed by 4 blocks
+    def setColliderActivity(self):
+        if self.myGame.blockExistsAtPos((self.gridPos[0], self.gridPos[1]+1)) and \
+                        self.myGame.blockExistsAtPos((self.gridPos[0], self.gridPos[1]-1)) and \
+                        self.myGame.blockExistsAtPos((self.gridPos[0]+1, self.gridPos[1])) and \
+                        self.myGame.blockExistsAtPos((self.gridPos[0]-1, self.gridPos[1])):
+            self.activeCollider = False
+        else:
+            self.activeCollider = True
+            
     # Inputs: tuple newPos(x, y)
     #
     # Results: Moves gridpos and collider to new x,y
@@ -168,12 +181,14 @@ class Game:
     loadedImgs = None
     myPlayer = None
     currentParticles = None
+    chunks = None
     
     # Inputs: 
     def __init__(self):
         self.currentParticles = []
         self.blockList = []
         self.loadedImgs = {}
+        self.chunks = {}
         self.myPlayer = Player.Player()
         
     # Results: Draws particles in current particles.
@@ -187,6 +202,12 @@ class Game:
             particle[3] = (particle[3][0] - particle[3][0]/16, particle[3][1] - (CONST.Gravity/2)) # Y Velocity - Gravity, X Velocity - Air friction
             particle[2] = (particle[2][0] + particle[3][0], particle[2][1] + particle[3][1])
             display.blit(particle[0], Graphics.getOnScreenPos(particle[2], cameraPos), particle[1])
+    
+    # Inputs: xPos of block
+    #
+    # Results: Returns chunk number of block
+    #def blockToChunk(self, xPos):
+        
     
     # Inputs: tuple pos(x, y)
     #
@@ -203,15 +224,21 @@ class Game:
     # Results: Adds new block object to blockList and, if slug is not found in loadedImgs,
     #          loads the block's image.
     def addBlock(self, pos, blockE):
-        blockSlug = CONST.BlockInfo[blockE][0]
-        if not blockE in self.loadedImgs:
-            self.loadedImgs[blockE] = pygame.image.load('Sprites/Blocks/' + blockSlug + '.png')
-            self.loadedImgs[blockE] = pygame.transform.scale(self.loadedImgs[blockE], (CONST.BlockSize, CONST.BlockSize))
-        self.blockList.append(Block(pos, blockE, self))
+        if not self.blockExistsAtPos(pos):
+            blockSlug = CONST.BlockInfo[blockE][0]
+            if not blockE in self.loadedImgs:
+                self.loadedImgs[blockE] = pygame.image.load('Sprites/Blocks/' + blockSlug + '.png')
+                self.loadedImgs[blockE] = pygame.transform.scale(self.loadedImgs[blockE], (CONST.BlockSize, CONST.BlockSize))
+            self.blockList.append(Block(pos, blockE, self))
         
     def draw(self, display):
         self.drawParticles(display, self.myPlayer.cameraPos)
-        self.myPlayer.tick(self.blockList)
+        potentialCollisions = []
+        for block in self.blockList:
+            if block.activeCollider:
+                if block.isOnScreen(self.myPlayer.cameraPos):
+                    potentialCollisions.append(block)
+        self.myPlayer.tick(potentialCollisions)
         self.myPlayer.draw(display)
         for block in self.blockList:
             if block.isOnScreen(self.myPlayer.cameraPos):
