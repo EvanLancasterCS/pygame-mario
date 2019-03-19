@@ -104,14 +104,14 @@ class Player:
     # Inputs: integer dir, -1 or 1
     #
     # Results: Change of velocity 
-    def move(self, dir):
+    def move(self, direc):
         if not self.crouching or not self.grounded: # Allows for air movement but not grounded movement when crouching
             if self.grounded:
-                self.inputDir = dir / abs(dir)
-                if dir != self.currentDir:#and dir != 0:
-                    self.currentDir = dir / abs(dir)
+                self.inputDir = direc / abs(direc)
+                if direc != self.currentDir:#and dir != 0:
+                    self.currentDir = direc / abs(direc)
             
-            accel = dir*CONST.PlayerAcceleration
+            accel = direc*CONST.PlayerAcceleration
             
             if self.currentVelocity[1] != 0: # If airborne, player should have less control
                 accel /= CONST.PlayerAirStruggle
@@ -119,7 +119,7 @@ class Player:
             cv = self.currentVelocity
             cv = (cv[0]+accel, cv[1])
             if abs(cv[0]) > abs(CONST.MaxPlayerSpeed):
-                cv = (CONST.MaxPlayerSpeed * (dir/abs(dir)), cv[1])
+                cv = (CONST.MaxPlayerSpeed * (direc/abs(direc)), cv[1])
             self.currentVelocity = cv
         
     # Inputs: None 
@@ -141,6 +141,9 @@ class Player:
     #          recalculating collisions for recently collided blocks after each movement.
     def checkCollisions(self, potentialCollisions):
         collisions = []
+        
+        if self.pos[0] < 0:
+            self.pos = (0, self.pos[1])
         
         # Adds blocks that are colliding to collisions array
         for block in potentialCollisions:
@@ -278,6 +281,11 @@ class Player:
             self.setAnim()
             self.currentAnimTickrate = 0
         self.cameraPos = self.pos # TODO: Camera smoothing, handling corners so that the camera never shows negative coordinates
+        
+        if self.cameraPos[0] <= CONST.ScreenSizeX/2:
+            self.cameraPos = (CONST.ScreenSizeX/2, self.cameraPos[1])
+        if self.cameraPos[1] <= CONST.ScreenSizeY/2-CONST.BlockSize:
+            self.cameraPos = (self.cameraPos[0], CONST.ScreenSizeY/2-CONST.BlockSize)
     
     # Results: Sets or increments the player's animation frame
     def setAnim(self):

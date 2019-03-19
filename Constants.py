@@ -8,12 +8,14 @@ ScreenSizeX = 1000
 ScreenSizeY = 800
 BlockSize = 40
 AnimTickrate = 0.08
+DrawDistance = 4
 
 # Editor Constants
 OptionsPageLength = 8
 
 # Physics Constants
 Gravity = 40 * (1 / FPS)
+ChunkSize = 4
 
 # Player Constants
 PlayerSizeX = 38

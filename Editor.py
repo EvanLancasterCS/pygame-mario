@@ -10,6 +10,11 @@ cOptionsPage = 0 # Current page
 cSelectedBlock = None # Current block
 mouseHeld = False
 cSelectedArea = [] # Currently selected area
+erasing = False
+showFPS = True
+
+pygame.font.init()
+editorFont = pygame.font.SysFont('Tahoma', 16)
 
 # Inputs: tuple(x,y) cameraPos
 #
@@ -52,7 +57,7 @@ def getCurrentPageBlocks():
 #
 # Results: draws available blocks to top of screen
 #          returns enum Blocks of currently moused over, None if none moused
-def drawOptions(display, cameraPos, game):
+def drawOptions(display, cameraPos, game, fps):
     blocks = getCurrentPageBlocks()
     
     xPadding = 10
@@ -76,6 +81,19 @@ def drawOptions(display, cameraPos, game):
         elif blockE == cSelectedBlock:
             pygame.draw.rect(display, (50, 50, 200), pygame.Rect(pos[0], pos[1], CONST.BlockSize, CONST.BlockSize), 4)
         currXPos += CONST.BlockSize + blockPadding
+    
+    if erasing:
+        pos = (cameraPos[0]+(CONST.ScreenSizeX/2)-CONST.BlockSize-xPadding, cameraPos[1]+(CONST.ScreenSizeY/2) - yPadding,0)
+        pos = Graphics.getOnScreenPos(pos, cameraPos)
+        pos = (round(pos[0],0), round(pos[1],0))
+        pygame.draw.rect(display, (255, 125, 125), pygame.Rect(pos[0], pos[1], CONST.BlockSize, CONST.BlockSize))
+    
+    if showFPS:
+        strFPS = str(fps)
+        strFPS = strFPS[11:13]
+        textSurf = editorFont.render('FPS: ' + strFPS, False, (0, 0, 0))
+        display.blit(textSurf, (CONST.ScreenSizeX-CONST.BlockSize*1.5, yPadding))
+    
     return mouseOver
 
 # Inputs: tuple(x,y) pos1
@@ -106,20 +124,14 @@ def calculateBoxPos(pos1, pos2, cameraPos):
 #
 # Results: Removes block if exists at gridPos
 def removeBlock(gridPos, game):
-    if game.blockExistsAtPos(gridPos):
-        b = None
-        for block in game.blockList:
-            if block.gridPos[0] == gridPos[0] and block.gridPos[1] == gridPos[1]:
-                b = block
-                break
-        game.blockList.remove(b) 
+    game.removeBlock(gridPos)
 
 # Inputs: pygame display
 #         GameState game
 #         boolean[] mouseInfo = {mouseDown, mouseUp}
 #
 # Results: draws full options menu & checks for input
-def draw(display, game, mouse1Info):
+def draw(display, game, mouse1Info, fps):
     global cSelectedBlock
     global cSelectedArea
     global mouseHeld
@@ -132,7 +144,7 @@ def draw(display, game, mouse1Info):
         mouseHeld = False
 
     cameraPos = game.myPlayer.cameraPos
-    option = drawOptions(display,cameraPos,game)
+    option = drawOptions(display,cameraPos,game,fps)
     
     canPlace = True
     
@@ -144,6 +156,7 @@ def draw(display, game, mouse1Info):
     elif cSelectedBlock == None:
         canPlace = False
     
+    # Sets up draw area and draws thikk boi
     if cSelectedBlock != None and canPlace:
         if mouseDown:
             cSelectedArea = []
@@ -159,8 +172,19 @@ def draw(display, game, mouse1Info):
             pos2 = mousePosToGrid(cameraPos)
             info = calculateBoxPos(pos1, pos2, cameraPos)
             
-            pygame.draw.rect(display, (200, 50, 50), pygame.Rect(info[0][0], info[0][1], info[1][0], info[1][1]), 1)
+            cThickness = None
+            cColor = None
+            
+            if erasing:
+                cThickness = 5
+                cColor = (255, 0, 0)
+            else:
+                cThickness = 1
+                cColor = (255, 50, 50)
+                
+            pygame.draw.rect(display, cColor, pygame.Rect(info[0][0], info[0][1], info[1][0], info[1][1]), cThickness)
     
+    # Places blocks / Erases blocks based on current selected area
     if canPlace and mouseUp:
         pos1 = cSelectedArea[0]
         pos2 = cSelectedArea[1]
@@ -168,11 +192,8 @@ def draw(display, game, mouse1Info):
         pos = info[0]
         size = info[1]
         pos = Graphics.screenToGrid(pos, cameraPos)
-        print(pos)
-        print(size)
         size = (size[0]/CONST.BlockSize, -size[1]/CONST.BlockSize)
         size = (math.floor(size[0])-1, math.floor(size[1])-1)
-        print(size)
         if size[0] == 0:
             size = (-2, size[1])
             pos = (pos[0]+1, pos[1])
@@ -185,7 +206,12 @@ def draw(display, game, mouse1Info):
         minY = min(y1, y2)
         maxY = max(y1, y2)
         
-        for x in range(minX, maxX):
-            for y in range(minY, maxY):
-                game.addBlock((x, y), cSelectedBlock)
+        if erasing:
+            for x in range(minX, maxX):
+                for y in range(minY, maxY):
+                    game.removeBlock((x, y))
+        else:
+            for x in range(minX, maxX):
+                for y in range(minY, maxY):
+                    game.addBlock((x, y), cSelectedBlock)
     

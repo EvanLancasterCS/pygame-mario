@@ -12,9 +12,12 @@ import math
 from enum import Enum
 from pygame.locals import *
 from _operator import pos
+from Constants import ChunkSize
+from pygame import camera
 
 class Block:
     gridPos = None
+    chunkPos = None
     blockE = None
     myGame = None
     activeCollider = None
@@ -29,6 +32,7 @@ class Block:
     #         Game myGame
     def __init__(self, gridPos, blockE, myGame):
         self.gridPos = gridPos
+        self.chunkPos = myGame.blockToChunk(gridPos[0])
         self.blockE = blockE
         self.myGame = myGame
         self.activeCollider = True
@@ -56,6 +60,15 @@ class Block:
     # Results: Moves gridpos and collider to new x,y
     def move(self, newPos):
         self.gridPos = newPos
+        nChunk = self.myGame.blockToChunk(self.gridPos[0])
+        if nChunk != self.chunkPos and self in self.myGame.chunks[self.chunkPos]:
+            self.myGame.chunks[self.chunkPos].remove(self)
+            self.chunkPos = nChunk
+            if self.chunkPos in self.myGame.chunks:
+                self.myGame.chunks[self.chunkPos].append(self)
+            else:
+                self.myGame.chunks[self.chunkPos] = [self]
+                
         rPos = self.getPixelPos()
         if not CONST.BlockInfo[self.blockE][1] == CONST.BlockTypes.powerup:
             self.myCollider.updatePos(rPos, (rPos[0]+CONST.BlockSize, rPos[1]+CONST.BlockSize))
@@ -88,6 +101,8 @@ class Block:
     #          powerup: removes self from game
     def interact(self, currentState):
         if CONST.BlockInfo[self.blockE][1] == CONST.BlockTypes.powerup:
+            chunkPos = self.myGame.blockToChunk(self.gridPos[0])
+            self.myGame.chunks[chunkPos].remove(self)
             self.myGame.blockList.remove(self)
             
     # Inputs: CurrentPlayerState currentState
@@ -110,6 +125,8 @@ class Block:
                 particle = [self.myGame.loadedImgs[self.blockE], r, pPos, (xVel, yVel), 1] # img, rect, pos, velocity, lifetime
                 self.myGame.currentParticles.append(particle)
             
+            chunkPos = self.myGame.blockToChunk(self.gridPos[0])
+            self.myGame.chunks[chunkPos].remove(self)
             self.myGame.blockList.remove(self)
         
     # Results: Gets current anim progress position, adds time.deltatime to current anim time if in progress
@@ -206,17 +223,42 @@ class Game:
     # Inputs: xPos of block
     #
     # Results: Returns chunk number of block
-    #def blockToChunk(self, xPos):
-        
+    def blockToChunk(self, xPos):
+        chunk = math.floor(xPos / CONST.ChunkSize)
+        return chunk
+    
+    # Inputs: int chunkNum
+    #
+    # Results: Returns array of blocks in chunk chunkNum
+    def getChunkBlocks(self, chunkNum):
+        if chunkNum in self.chunks:
+            return self.chunks[chunkNum]
+        return []
     
     # Inputs: tuple pos(x, y)
     #
     # Results: Returns True / False based on if there is a block at given gridpos
     def blockExistsAtPos(self, pos):
-        for block in self.blockList:
+        chunkPos = self.blockToChunk(pos[0])
+        chunkBlocks = self.getChunkBlocks(chunkPos)
+        for block in chunkBlocks:
             if block.gridPos[0] == pos[0] and block.gridPos[1] == pos[1]:
                 return True
         return False
+    
+    # Inputs: tuple pos(x,y)
+    #
+    # Results: Removes block from blockList and chunks if exists
+    def removeBlock(self, pos):
+        if self.blockExistsAtPos(pos):
+            b = None
+            for block in self.blockList:
+                if block.gridPos[0] == pos[0] and block.gridPos[1] == pos[1]:
+                    b = block
+                    break
+            chunkPos = self.blockToChunk(pos[0])
+            self.chunks[chunkPos].remove(b)
+            self.blockList.remove(b)
     
     # Inputs: Enum from Blocks
     #         tuple pos(x, y)
@@ -229,19 +271,39 @@ class Game:
             if not blockE in self.loadedImgs:
                 self.loadedImgs[blockE] = pygame.image.load('Sprites/Blocks/' + blockSlug + '.png')
                 self.loadedImgs[blockE] = pygame.transform.scale(self.loadedImgs[blockE], (CONST.BlockSize, CONST.BlockSize))
-            self.blockList.append(Block(pos, blockE, self))
-        
+            b = Block(pos, blockE, self)
+            self.blockList.append(b)
+            chunkPos = self.blockToChunk(pos[0])
+            if chunkPos in self.chunks:
+                self.chunks[chunkPos].append(b)
+            else:
+                self.chunks[chunkPos] = [b]
+    
+    # Results: Draws game to screen, inputs collisions based on player chunk
     def draw(self, display):
-        self.drawParticles(display, self.myPlayer.cameraPos)
+        if self.myPlayer.pos[1] < 0:
+            self.myPlayer.pos = (100, 100)
+        
         potentialCollisions = []
-        for block in self.blockList:
-            if block.activeCollider:
-                if block.isOnScreen(self.myPlayer.cameraPos):
-                    potentialCollisions.append(block)
+        drawArea = []
+        
+        playerPos = Graphics.getOnScreenPos(self.myPlayer.pos, self.myPlayer.cameraPos)
+        
+        playerChunk = self.blockToChunk(Graphics.screenToGrid(playerPos, self.myPlayer.cameraPos)[0])
+        cameraChunk = self.blockToChunk(Graphics.screenToGrid((CONST.ScreenSizeX/2,0), self.myPlayer.cameraPos)[0])
+        
+        for i in range(-1, 2):
+            potentialCollisions.extend(self.getChunkBlocks(playerChunk+i))
+        for i in range(-CONST.DrawDistance, CONST.DrawDistance+1):
+            drawArea.extend(self.getChunkBlocks(cameraChunk+i))
+        
         self.myPlayer.tick(potentialCollisions)
         self.myPlayer.draw(display)
-        for block in self.blockList:
+        
+        for block in drawArea:
             if block.isOnScreen(self.myPlayer.cameraPos):
                 block.draw(display, self.myPlayer.cameraPos)
+                
+        self.drawParticles(display, self.myPlayer.cameraPos)
         
         

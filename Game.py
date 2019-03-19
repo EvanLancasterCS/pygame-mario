@@ -14,24 +14,18 @@ fpsClock = pygame.time.Clock()
 
 display = pygame.display.set_mode((CONST.ScreenSizeX, CONST.ScreenSizeY))
 pygame.init()
+pygame.font.init()
 game = GS.Game()
-for x in range(-15, 15):
-    for y in range(-1, 0):
-        game.addBlock((x,y), CONST.Blocks.groundRock)
-        
-game.addBlock((4, 0), CONST.Blocks.wallBrick)
-game.addBlock((4, 1), CONST.Blocks.wallBrick)
-game.addBlock((4, 3), CONST.Blocks.wallBrick)
-game.addBlock((3, 1), CONST.Blocks.mushroom)
-for x in range(15):
-    game.addBlock((x, 4), CONST.Blocks.wallBrick)
-game.addBlock((16, -4), CONST.Blocks.groundRock)
+
+for x in range(0, 3):
+    for y in range(0, 2):
+        game.addBlock((x, y), CONST.Blocks.groundRock)
 
 while True:
     display.fill((100, 120, 180))
     mouseDown = False
     mouseUp = False
-    print(fpsClock)
+
     for event in pygame.event.get():
         if event.type == QUIT:
             pygame.quit()
@@ -50,6 +44,8 @@ while True:
                 game.addBlock(gridPos, CONST.Blocks.mushroom)
             if event.key == pygame.K_s:
                 game.myPlayer.crouch()
+            if event.key == pygame.K_q:
+                Editor.erasing = not Editor.erasing
         if event.type == KEYUP:
             if event.key == pygame.K_s:
                 game.myPlayer.uncrouch()
@@ -74,7 +70,7 @@ while True:
     
     
     game.draw(display)
-    Editor.draw(display, game, [mouseDown, mouseUp])
+    Editor.draw(display, game, [mouseDown, mouseUp], fpsClock)
     
     pygame.display.update()
     fpsClock.tick(CONST.FPS)
