@@ -13,8 +13,33 @@ cSelectedArea = [] # Currently selected area
 erasing = False
 showFPS = True
 
+recentSnapshot = [] # Snapshot after entering play mode after being in editor mode;
+                    # Consists of array of tuples(pos, blockE, reward) 
+
 pygame.font.init()
-editorFont = pygame.font.SysFont('Tahoma', 16)
+editorFont = pygame.font.SysFont('Tahoma', 12)
+
+# Inputs: GameState game
+# 
+# Results: Sets recentSnapshot to consist of all blocks in game.blockList
+def setSnapshot(game):
+    global recentSnapshot
+    recentSnapshot = []
+    for block in game.blockList:
+        recentSnapshot.append((block.gridPos,block.blockE,block.reward))
+
+# Inputs: GameState game
+# 
+# Results: Sets game.blockList to recentSnapshot
+def restoreSnapshot(game):
+    global recentSnapshot
+    game.blockList = []
+    game.chunks = {}
+    for blockInfo in recentSnapshot:
+        game.addBlock(blockInfo[0],blockInfo[1])
+        block = game.getBlock(blockInfo[0])
+        block.reward = blockInfo[2]
+    
 
 # Inputs: tuple(x,y) cameraPos
 #
@@ -37,6 +62,15 @@ def drawMouseover(display, cameraPos):
     realPos = Graphics.getOnScreenPos(realPos, cameraPos)
     pygame.draw.rect(display, (200, 50, 50), pygame.Rect(realPos[0], realPos[1], CONST.BlockSize, CONST.BlockSize), 1)
 
+# Results: Returns true if there is enough blocks for a next page
+def canNextPage():
+    maxPage = math.floor(len(CONST.BlockInfo.keys()) / CONST.OptionsPageLength) - 1
+    return cOptionsPage <= maxPage
+
+# Results: Returns true if can previous page
+def canPrevPage():
+    return cOptionsPage > 0
+
 # Results: Returns array of enum Blocks that should be displayed
 def getCurrentPageBlocks():
     blocks = []
@@ -52,12 +86,51 @@ def getCurrentPageBlocks():
     return blocks
 
 # Inputs: pygame display
+#         GameState game
+#         Blocks blockE
+#         tuple(x,y) pos
+#
+# Results: draws blockE to screen at pos
+def drawFakeBlock(display, game, blockE, pos):
+    blockSlug = CONST.BlockInfo[blockE][0]
+    if not blockE in game.loadedImgs:
+        game.loadedImgs[blockE] = pygame.image.load('Sprites/Blocks/' + blockSlug + '.png')
+        game.loadedImgs[blockE] = pygame.transform.scale(game.loadedImgs[blockE], (CONST.BlockSize, CONST.BlockSize))
+    display.blit(game.loadedImgs[blockE], pos)
+
+# Inputs: pygame display
+#         GameState game
+#         Blocks blockE
+#         tuple(x,y) gridPos
+#
+# Results: draws blockE to screen at gridpos
+def drawFakeBlockGridPos(display, game, blockE, gridPos):
+    realPos = Graphics.getOnScreenPos((gridPos[0]*CONST.BlockSize, gridPos[1]*CONST.BlockSize), game.myPlayer.cameraPos)
+    drawFakeBlock(display, game, blockE, realPos)
+
+# Inputs: pygame display
+#         GameState game
+#
+# Results: draws all hidden rewards infront of appropriate blocks
+def drawRewards(display, game):
+    cameraChunk = game.blockToChunk(Graphics.screenToGrid((CONST.ScreenSizeX/2,0), game.myPlayer.cameraPos)[0])
+    nearby = []
+    for i in range(-CONST.DrawDistance, CONST.DrawDistance+1):
+        nearby.extend(game.getChunkBlocks(cameraChunk+i))
+    for block in nearby:
+        if block.reward != None:
+            drawFakeBlockGridPos(display, game, block.reward, (block.gridPos[0], block.gridPos[1]+0.1))
+
+# Inputs: pygame display
 #         tuple(x,y) cameraPos
 #         GameState game
+#         string FPS
+#         Boolean mouseUp
 #
 # Results: draws available blocks to top of screen
 #          returns enum Blocks of currently moused over, None if none moused
-def drawOptions(display, cameraPos, game, fps):
+def drawOptions(display, cameraPos, game, fps, mouseUp):
+    global cOptionsPage
     blocks = getCurrentPageBlocks()
     
     xPadding = 10
@@ -66,28 +139,64 @@ def drawOptions(display, cameraPos, game, fps):
     
     currXPos = 0
     mouseOver = None
+    
+    regularPageColor = (50, 200, 50)
+    mouseOverPageColor = (125, 225, 125)
+    
+    if canPrevPage():
+        mColor = regularPageColor
+        pos = (xPadding, 2*yPadding + CONST.BlockSize)
+        size = (75, 15)
+        
+        if (Graphics.isMouseOverArea(pos, (pos[0]+size[0],pos[1]+size[1]))):
+            mColor = mouseOverPageColor
+            if mouseUp:
+                cOptionsPage -= 1
+        
+        pygame.draw.rect(display, mColor, pygame.Rect(pos[0], pos[1], size[0], size[1]))
+        
+        textSurf = editorFont.render('PREV', False, (0, 0, 0))
+        display.blit(textSurf, (pos[0]+23, pos[1]))
+    
+    if canNextPage():
+        mColor = regularPageColor
+        pos = (xPadding + 80, 2*yPadding + CONST.BlockSize)
+        size = (75, 15)
+        
+        if (Graphics.isMouseOverArea(pos, (pos[0]+size[0],pos[1]+size[1]))):
+            mColor = mouseOverPageColor
+            if mouseUp:
+                cOptionsPage += 1
+        
+        pygame.draw.rect(display, mColor, pygame.Rect(pos[0], pos[1], size[0], size[1]))
+        textSurf = editorFont.render('NEXT', False, (0, 0, 0))
+        display.blit(textSurf, (pos[0]+23, pos[1]))
+    
+    
+    # Iterate through current page's blocks
     for blockE in blocks:
-        blockSlug = CONST.BlockInfo[blockE][0]
-        if not blockE in game.loadedImgs:
-            game.loadedImgs[blockE] = pygame.image.load('Sprites/Blocks/' + blockSlug + '.png')
-            game.loadedImgs[blockE] = pygame.transform.scale(game.loadedImgs[blockE], (CONST.BlockSize, CONST.BlockSize))
-        pos = (cameraPos[0]-(CONST.ScreenSizeX/2) + currXPos + xPadding, cameraPos[1]+(CONST.ScreenSizeY/2) - yPadding,0)
-        pos = Graphics.getOnScreenPos(pos, cameraPos)
-        pos = (round(pos[0],0), round(pos[1],0))
-        display.blit(game.loadedImgs[blockE], pos)
+        # Draw blockE choice to screen
+        pos = (currXPos+xPadding, yPadding)
+        drawFakeBlock(display, game, blockE, pos)
+        
+        # Check if mouse is currently over block choice
         if (Graphics.isMouseOverArea(pos, (pos[0]+CONST.BlockSize, pos[1]+CONST.BlockSize))):
             pygame.draw.rect(display, (200, 50, 50), pygame.Rect(pos[0], pos[1], CONST.BlockSize, CONST.BlockSize), 2)
             mouseOver = blockE
         elif blockE == cSelectedBlock:
             pygame.draw.rect(display, (50, 50, 200), pygame.Rect(pos[0], pos[1], CONST.BlockSize, CONST.BlockSize), 4)
+        
+        # Increment xPos for next loop
         currXPos += CONST.BlockSize + blockPadding
     
+    # Draws square for eraser indicator if active
     if erasing:
         pos = (cameraPos[0]+(CONST.ScreenSizeX/2)-CONST.BlockSize-xPadding, cameraPos[1]+(CONST.ScreenSizeY/2) - yPadding,0)
         pos = Graphics.getOnScreenPos(pos, cameraPos)
         pos = (round(pos[0],0), round(pos[1],0))
         pygame.draw.rect(display, (255, 125, 125), pygame.Rect(pos[0], pos[1], CONST.BlockSize, CONST.BlockSize))
     
+    # Draws FPS text in upper right if set active
     if showFPS:
         strFPS = str(fps)
         strFPS = strFPS[11:13]
@@ -125,6 +234,26 @@ def calculateBoxPos(pos1, pos2, cameraPos):
 # Results: Removes block if exists at gridPos
 def removeBlock(gridPos, game):
     game.removeBlock(gridPos)
+    
+# Inputs: GameState game
+#
+# Results: Moves camera based on keyboard inputs
+def checkInput(game):
+    keys = pygame.key.get_pressed()
+    
+    speed = 10
+    if keys[pygame.K_LSHIFT]:
+        speed *= 2
+    
+    if keys[pygame.K_d]:
+        game.myPlayer.forceMove((speed, 0))
+    if keys[pygame.K_a] and game.myPlayer.pos[0] > 0:
+        game.myPlayer.forceMove((-speed, 0))
+    if keys[pygame.K_w]:
+        game.myPlayer.forceMove((0, speed))
+    if keys[pygame.K_s] and game.myPlayer.pos[1] > 0:
+        game.myPlayer.forceMove((0, -speed))
+
 
 # Inputs: pygame display
 #         GameState game
@@ -136,6 +265,10 @@ def draw(display, game, mouse1Info, fps):
     global cSelectedArea
     global mouseHeld
     
+    checkInput(game)
+    game.draw(display, False)
+    drawRewards(display, game)
+    
     mouseDown = mouse1Info[0]
     mouseUp = mouse1Info[1]
     if mouseDown:
@@ -144,16 +277,16 @@ def draw(display, game, mouse1Info, fps):
         mouseHeld = False
 
     cameraPos = game.myPlayer.cameraPos
-    option = drawOptions(display,cameraPos,game,fps)
+    option = drawOptions(display,cameraPos,game,fps,mouseUp)
     
     canPlace = True
     
-    if option == None and cSelectedBlock != None:
+    if option == None and cSelectedBlock != None: # If nothing is moused over and no block is chosen, draw mouseover on grid pos of mouse
         drawMouseover(display,cameraPos)
-    elif option != None and mouseUp:
+    elif option != None and mouseUp: # If something is moused over and mouse is up, set canPlace to false and change current block to option
         canPlace = False
         cSelectedBlock = option
-    elif cSelectedBlock == None:
+    elif cSelectedBlock == None: # If no block is selected, don't place a block
         canPlace = False
     
     # Sets up draw area and draws thikk boi
@@ -212,7 +345,7 @@ def draw(display, game, mouse1Info, fps):
             for x in range(minX, maxX):
                 for y in range(minY, maxY):
                     game.removeBlock((x, y))
-        elif block != None and minX == maxX-1 and minY == maxY-1 and block.blockE == CONST.Blocks.emptyQuestionBlock:
+        elif block != None and (minX == maxX-1 and minY == maxY-1 and block.blockE == CONST.Blocks.emptyQuestionBlock or CONST.BlockInfo[block.blockE][1] == CONST.BlockTypes.reward):
             block.reward = cSelectedBlock
             block.blockE = CONST.Blocks.questionBlock
         else:

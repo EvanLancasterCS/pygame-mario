@@ -44,7 +44,7 @@ class Block:
         self.currentAnimAdd = 0
         self.currentVelocity = (0,0)
         if CONST.BlockInfo[self.blockE][1] == CONST.BlockTypes.powerup and CONST.BlockInfo[self.blockE][3]:
-            self.currentVelocity = (0.05, 0)
+            self.animProgress = 0
         if CONST.BlockInfo[self.blockE][1] == CONST.BlockTypes.reward:
             self.reward = CONST.Blocks.mushroom
     
@@ -144,17 +144,32 @@ class Block:
         
     # Results: Gets current anim progress position, adds time.deltatime to current anim time if in progress
     def getAnimPos(self):
-        animTime = 0.25
-        positionModifier = -125
-        if self.animProgress < animTime:
-            if self.animProgress < animTime/2:
-                self.currentAnimAdd += (1 / CONST.FPS) * positionModifier
-            else:
-                self.currentAnimAdd -= (1 / CONST.FPS) * positionModifier
-            self.animProgress += (1 / CONST.FPS)
+        blockType = CONST.BlockInfo[self.blockE][1]
+        if blockType == CONST.BlockTypes.powerup:
+            animTime = 0.5
+            distance = CONST.BlockSize - 6
+            if self.animProgress < animTime:
+                addition = ((1 / CONST.FPS) * distance)/animTime
+                self.currentAnimAdd = distance - (addition*(self.animProgress*CONST.FPS))
+
+                self.animProgress += (1/CONST.FPS)
+            elif self.currentAnimAdd != 0:
+                self.currentAnimAdd = 0
+                if CONST.BlockInfo[self.blockE][3]:
+                    self.currentVelocity = (0.05, 0)
+            return self.currentAnimAdd
         else:
-            return 0
-        return self.currentAnimAdd
+            animTime = 0.25
+            positionModifier = -75
+            if self.animProgress < animTime:
+                if self.animProgress < animTime/2:
+                    self.currentAnimAdd += (1 / CONST.FPS) * positionModifier
+                else:
+                    self.currentAnimAdd -= (1 / CONST.FPS) * positionModifier
+                self.animProgress += (1 / CONST.FPS)
+            else:
+                return 0
+            return self.currentAnimAdd
     
     # Results: basic vertical collision & sets vert velocity to 0 when grounded.
     def checkVerticalCollision(self):
@@ -195,11 +210,11 @@ class Block:
     #         tuple cameraPos(x, y)
     #
     # Results: Draws self to screen based on camera position, as well as anim position
-    def draw(self, display, cameraPos):
-        if CONST.BlockInfo[self.blockE][1] == CONST.BlockTypes.powerup:
-            self.tickVelocity(not self.checkVerticalCollision())
-            self.checkHorizontalCollision()
-            
+    def draw(self, display, cameraPos, *tick):
+        if len(tick) == 0:
+            if CONST.BlockInfo[self.blockE][1] == CONST.BlockTypes.powerup:
+                self.tickVelocity(not self.checkVerticalCollision())
+                self.checkHorizontalCollision()
         
         pos = self.getOnScreenPos(cameraPos)
         myImg = self.myGame.loadedImgs[self.blockE]
@@ -304,10 +319,7 @@ class Game:
                 self.chunks[chunkPos] = [b]
     
     # Results: Draws game to screen, inputs collisions based on player chunk
-    def draw(self, display):
-        if self.myPlayer.pos[1] < 0:
-            self.myPlayer.pos = (100, 100)
-        
+    def draw(self, display, *tick):
         potentialCollisions = []
         drawArea = []
         
@@ -321,14 +333,18 @@ class Game:
         for i in range(-CONST.DrawDistance, CONST.DrawDistance+1):
             drawArea.extend(self.getChunkBlocks(cameraChunk+i))
         
-        self.myPlayer.tick(potentialCollisions)
-        self.myPlayer.draw(display)
+        if len(tick) == 0:
+            if self.myPlayer.pos[1] < 0:
+                self.myPlayer.pos = (100, 100)
+            self.myPlayer.tick(potentialCollisions)
         
         for i in range(len(drawArea)):
             block = drawArea[len(drawArea)-i-1]
             if block.isOnScreen(self.myPlayer.cameraPos):
-                block.draw(display, self.myPlayer.cameraPos)
+                block.draw(display, self.myPlayer.cameraPos, *tick)
                 
         self.drawParticles(display, self.myPlayer.cameraPos)
+        
+        self.myPlayer.draw(display)
         
         

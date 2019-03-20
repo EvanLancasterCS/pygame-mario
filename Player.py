@@ -42,7 +42,7 @@ class Player:
     def __init__(self):
         self.pos = (0, 100)
         self.crouching = False
-        self.cameraPos = self.pos
+        self.cameraPos = (CONST.ScreenSizeX/2, CONST.ScreenSizeY/2-CONST.BlockSize)
         self.currentHeight = CONST.PlayerSizeY
         self.loadedAnims = {}
         self.loadAnims()
@@ -56,6 +56,19 @@ class Player:
         self.inputDir = 0
         self.jumpTime = 0
         self.myCollider = Physics2D.BoxCollider(self.pos, (self.pos[0] + CONST.PlayerSizeX, self.pos[1] + self.currentHeight), False)
+    
+    # Inputs: tuple(x,y) direction
+    #
+    # Results: Moves player x by y pixels
+    def forceMove(self, direction):
+        self.pos = (self.pos[0] + direction[0], self.pos[1] + direction[1])
+        self.myCollider.updatePos(self.pos, (self.pos[0] + CONST.PlayerSizeX, self.pos[1] + self.currentHeight))
+        self.cameraPos = self.pos
+        
+        if self.cameraPos[0] <= CONST.ScreenSizeX/2:
+            self.cameraPos = (CONST.ScreenSizeX/2, self.cameraPos[1])
+        if self.cameraPos[1] <= CONST.ScreenSizeY/2-CONST.BlockSize:
+            self.cameraPos = (self.cameraPos[0], CONST.ScreenSizeY/2-CONST.BlockSize)
         
     # Inputs: CurrentPlayerState state
     #

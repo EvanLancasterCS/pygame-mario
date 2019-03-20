@@ -17,6 +17,8 @@ pygame.init()
 pygame.font.init()
 game = GS.Game()
 
+gType = 1
+
 for x in range(0, 3):
     for y in range(0, 2):
         game.addBlock((x, y), CONST.Blocks.groundRock)
@@ -43,6 +45,13 @@ while True:
                 game.myPlayer.crouch()
             if event.key == pygame.K_q:
                 Editor.erasing = not Editor.erasing
+            if event.key == pygame.K_TAB:
+                if gType == 1:
+                    gType = 0
+                    Editor.setSnapshot(game)
+                else:
+                    gType = 1
+                    Editor.restoreSnapshot(game)
         if event.type == KEYUP:
             if event.key == pygame.K_s:
                 game.myPlayer.uncrouch()
@@ -51,22 +60,28 @@ while True:
     keys = pygame.key.get_pressed()
     moving = False
     modifier = 1
+    
+    if gType == 0:
+        if keys[pygame.K_LSHIFT]:
+            modifier = CONST.PlayerSprintIncrease
+        if keys[pygame.K_d]:
+            game.myPlayer.move(1 * modifier)
+            moving = True
+        if keys[pygame.K_a]:
+            game.myPlayer.move(-1 * modifier)
+            moving = True
+        if keys[pygame.K_w]:
+            game.myPlayer.jump()
+        if not moving:
+            game.myPlayer.inputDir = 0
+    
+    if gType == 0:
+        game.draw(display)
+    elif gType == 1:
+        Editor.draw(display, game, [mouseDown, mouseUp], fpsClock)
         
-    if keys[pygame.K_LSHIFT]:
-        modifier = CONST.PlayerSprintIncrease
-    if keys[pygame.K_d]:
-        game.myPlayer.move(1 * modifier)
-        moving = True
-    if keys[pygame.K_a]:
-        game.myPlayer.move(-1 * modifier)
-        moving = True
-    if keys[pygame.K_w]:
-        game.myPlayer.jump()
-    if not moving:
-        game.myPlayer.inputDir = 0
     
-    
-    game.draw(display)
+    #game.draw(display)
     #Editor.draw(display, game, [mouseDown, mouseUp], fpsClock)
     
     pygame.display.update()
